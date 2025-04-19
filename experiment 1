@@ -1,0 +1,43 @@
+# BigMart Sales Analysis using PySpark
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, isnan, when, count, desc
+import time
+
+# Start Spark Session
+spark = SparkSession.builder.appName("BigMart Analysis").getOrCreate()
+
+# Timer start
+t0 = time.time()
+
+# Load the dataset
+df = spark.read.option("header", True).csv("BigMart Sales.csv")
+print("\n Dataset Loaded Successfully!\n")
+
+# Show schema
+df.printSchema()
+
+# Row count
+row_count = df.count()
+print(f"Total Rows: {row_count}")
+
+# Check missing values
+print("\n🔍 Missing Values by Column:")
+df.select([count(when(col(c).isNull() | isnan(c), c)).alias(c) for c in df.columns]).show()
+
+# Group by Outlet_Identifier - Average Sales
+print("\n Average Sales per Outlet:")
+df.groupBy("Outlet_Identifier").avg("Item_Outlet_Sales").show()
+
+# Top 10 Selling Items
+print("\n Top 10 Selling Items:")
+df.select("Item_Identifier", "Item_Outlet_Sales") \
+  .orderBy(desc("Item_Outlet_Sales")) \
+  .limit(10) \
+  .show()
+
+# Execution time
+print("\n Time taken: %.2f seconds" % (time.time() - t0))
+
+# Stop Spark session
+spark.stop()
