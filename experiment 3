@@ -1,0 +1,40 @@
+import pandas as pd
+from dash import Dash, dcc, html
+import plotly.express as px
+
+# Load dataset (CSV)
+df = pd.read_csv("BigMart Sales.csv")
+
+# Preprocess: drop nulls in relevant columns
+df = df.dropna(subset=["Item_Outlet_Sales", "Outlet_Identifier", "Item_Identifier"])
+
+# App initialization
+app = Dash(__name__)
+app.title = "BigMart Sales Dashboard"
+
+# Average sales per outlet
+avg_sales = df.groupby("Outlet_Identifier")["Item_Outlet_Sales"].mean().reset_index()
+
+# Top 10 selling items
+top_items = df.sort_values(by="Item_Outlet_Sales", ascending=False).head(10)
+
+# App layout
+app.layout = html.Div([
+    html.H1(" BigMart Sales Dashboard", style={"textAlign": "center"}),
+
+    dcc.Graph(
+        id="avg-sales-outlet",
+        figure=px.bar(avg_sales, x="Outlet_Identifier", y="Item_Outlet_Sales",
+                      title="Average Sales per Outlet", color="Outlet_Identifier")
+    ),
+
+    dcc.Graph(
+        id="top-items",
+        figure=px.bar(top_items, x="Item_Identifier", y="Item_Outlet_Sales",
+                      title="Top 10 Selling Items", color="Item_Outlet_Sales")
+    ),
+])
+
+# Run server
+if __name__ == "__main__":
+    app.run_server(debug=True)
