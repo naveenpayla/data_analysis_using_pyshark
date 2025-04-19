@@ -1,0 +1,82 @@
+# BigMart Sales Analysis using PySpark and Machine Learning
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, isnan, when, count, desc
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.regression import LinearRegression
+import time
+
+# Start Spark Session
+spark = SparkSession.builder.appName("BigMart Analysis").getOrCreate()
+
+# Timer start
+t0 = time.time()
+
+# Load the dataset
+df = spark.read.option("header", True).option("inferSchema", True).csv("BigMart Sales.csv")
+print("\n✅ Dataset Loaded Successfully!\n")
+
+# Show schema
+df.printSchema()
+
+# Row count
+row_count = df.count()
+print(f"Total Rows: {row_count}")
+
+# Check missing values
+print("\n🔍 Missing Values by Column:")
+df.select([count(when(col(c).isNull() | isnan(c), c)).alias(c) for c in df.columns]).show()
+
+# Group by Outlet_Identifier - Average Sales
+print("\n📊 Average Sales per Outlet:")
+df.groupBy("Outlet_Identifier").avg("Item_Outlet_Sales").show()
+
+# Top 10 Selling Items
+print("\n🏆 Top 10 Selling Items:")
+df.select("Item_Identifier", "Item_Outlet_Sales") \
+  .orderBy(desc("Item_Outlet_Sales")) \
+  .limit(10) \
+  .show()
+
+# ========== MACHINE LEARNING MODEL ==========
+print("\n🤖 Building a Regression Model to Predict Sales")
+
+# Step 1: Drop rows with missing target values
+df = df.na.drop(subset=["Item_Outlet_Sales"])
+
+# Step 2: Handle categorical variables (encoding)
+categorical_cols = ["Item_Fat_Content", "Outlet_Location_Type", "Outlet_Type"]
+for col_name in categorical_cols:
+    indexer = StringIndexer(inputCol=col_name, outputCol=col_name + "_Index")
+    df = indexer.fit(df).transform(df)
+
+# Step 3: Feature selection
+feature_cols = ["Item_MRP", "Item_Weight", "Item_Visibility", "Item_Fat_Content_Index",
+                "Outlet_Location_Type_Index", "Outlet_Type_Index"]
+
+# Step 4: Assemble features
+assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+df = assembler.transform(df)
+
+# Step 5: Train/Test Split
+df = df.select("features", "Item_Outlet_Sales")
+train_data, test_data = df.randomSplit([0.8, 0.2], seed=42)
+
+# Step 6: Model Training
+lr = LinearRegression(labelCol="Item_Outlet_Sales")
+lr_model = lr.fit(train_data)
+
+# Step 7: Model Evaluation
+predictions = lr_model.transform(test_data)
+predictions.select("prediction", "Item_Outlet_Sales").show(5)
+
+print("\n📈 Model Performance:")
+print("RMSE:", lr_model.summary.rootMeanSquaredError)
+print("R2:", lr_model.summary.r2)
+
+# Execution time
+print("\n⏱️ Total Time taken: %.2f seconds" % (time.time() - t0))
+
+# Stop Spark session
+spark.stop()
+
